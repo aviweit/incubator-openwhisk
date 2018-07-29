@@ -180,6 +180,7 @@ class DockerContainer(protected val id: ContainerId,
     if (useRunc) { runc.pause(id) } else { docker.pause(id) }
   def resume()(implicit transid: TransactionId): Future[Unit] =
     if (useRunc) { runc.resume(id) } else { docker.unpause(id) }
+  def label(key: String, value: String)(implicit transid: TransactionId): Future[Unit] = Future.successful({})
   override def destroy()(implicit transid: TransactionId): Future[Unit] = {
     super.destroy()
     docker.rm(id)

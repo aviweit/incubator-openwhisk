@@ -75,6 +75,9 @@ trait Container {
   /** Dual of halt. */
   def resume()(implicit transid: TransactionId): Future[Unit]
 
+  /** Label container. */
+  def label(key: String, value: String)(implicit transid: TransactionId): Future[Unit]
+
   /** Obtains logs up to a given threshold from the container. Optionally waits for a sentinel to appear. */
   def logs(limit: ByteSize, waitForSentinel: Boolean)(implicit transid: TransactionId): Source[ByteString, Any]
 
@@ -129,11 +132,12 @@ trait Container {
       transid.started(
         this,
         LoggingMarkers.INVOKER_ACTIVATION_RUN,
-        s"sending arguments to $actionName at $id $addr",
+        s"sending arguments to $actionName at $id $addr Environment: $environment containerID: $id", // id here is "pod" name :)
         logLevel = InfoLevel)
 
     val parameterWrapper = JsObject("value" -> parameters)
     val body = JsObject(parameterWrapper.fields ++ environment.fields)
+    label("ow_action", actionName)
     callContainer("/run", body, timeout, retry = false)
       .andThen { // never fails
         case Success(r: RunResult) =>
