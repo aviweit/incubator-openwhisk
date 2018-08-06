@@ -174,9 +174,12 @@ class KubernetesClient(
   }
 
   // kubectl label pods wskinvoker-00-38-prewarm-nodejs6 ow_action- ow_namespace- -n openwhisk --overwrite
-  def label(container: KubernetesContainer, key: String, value: String)(implicit transid: TransactionId): Future[Unit] = Future.successful({})
-  //  runCmd(Seq("label", "pods", container.id.asString, s"$key=$value", "--overwrite"), config.timeouts.rm).map(_ => ())
-  //}
+  def label(container: KubernetesContainer, key: String, value: String)(implicit transid: TransactionId): Future[Unit] = {
+    var v = value.split('/')
+    var v2 = v.slice(1, v.length)
+    var v3 = v2.mkString("_")
+    runCmd(Seq("label", "pods", container.id.asString, s"$key=$v3", "--overwrite"), config.timeouts.rm).map(_ => ())
+  }
 
   // suspend is a no-op with the basic KubernetesClient
   def suspend(container: KubernetesContainer)(implicit transid: TransactionId): Future[Unit] = Future.successful({})
