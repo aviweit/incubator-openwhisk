@@ -15,38 +15,14 @@
  * limitations under the License.
  */
 
-package whisk.common
+package whisk.utils
 
-import java.util.Date
-import java.text.SimpleDateFormat
-import java.lang.System
+import java.time.{Duration => JDuration}
 
-/**
- * Utility methods for creating formatted date strings.
- *
- */
-object DateUtil {
+import scala.concurrent.duration.{Duration => SDuration}
+import scala.language.implicitConversions
 
-  /**
-   * Returns the current time as a string in yyyy-MM-dd'T'HH:mm:ss.SSSZ format.
-   */
-  def getTimeString(): String = {
-    val now = new Date(System.currentTimeMillis())
-    timeFormat.synchronized {
-      timeFormat.format(now)
-    }
-  }
-
-  /**
-   * Takes a string in a format given by getTimeString and returns time in epoch millis.
-   */
-  def parseToMilli(dateStr: String): Long = {
-    val date = timeFormat.synchronized {
-      timeFormat.parse(dateStr, new java.text.ParsePosition(0))
-    }
-    date.getTime()
-  }
-
-  private val timeFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ")
-
+object TimeHelpers {
+  implicit def toJavaDuration(d: SDuration): JDuration = JDuration.ofNanos(d.toNanos)
+  implicit def toScalaDuration(d: JDuration): SDuration = SDuration.fromNanos(d.toNanos)
 }
