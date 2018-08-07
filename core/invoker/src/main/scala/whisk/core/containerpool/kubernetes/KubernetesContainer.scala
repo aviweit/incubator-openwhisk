@@ -103,7 +103,7 @@ class KubernetesContainer(protected[core] val id: ContainerId,
 
   protected val waitForLogs: FiniteDuration = 2.seconds
 
-  def label(key: String, value: String)(implicit transid: TransactionId): Future[Unit] = kubernetes.label(this, key, value)
+  def label(key: String, value: String, performLabel: Boolean = true)(implicit transid: TransactionId): Future[Unit] = kubernetes.label(this, key, value, performLabel)
 
   def suspend()(implicit transid: TransactionId): Future[Unit] = kubernetes.suspend(this)
 
