@@ -75,6 +75,9 @@ trait Container {
   /** Dual of halt. */
   def resume()(implicit transid: TransactionId): Future[Unit]
 
+  /** Label container. */
+  def label(key: String, value: String, performLabel: Boolean)(implicit transid: TransactionId): Future[Unit]
+
   /** Obtains logs up to a given threshold from the container. Optionally waits for a sentinel to appear. */
   def logs(limit: ByteSize, waitForSentinel: Boolean)(implicit transid: TransactionId): Source[ByteString, Any]
 
@@ -134,9 +137,11 @@ trait Container {
 
     val parameterWrapper = JsObject("value" -> parameters)
     val body = JsObject(parameterWrapper.fields ++ environment.fields)
+    label("ow_action", actionName, performLabel = true)
     callContainer("/run", body, timeout, retry = false)
       .andThen { // never fails
         case Success(r: RunResult) =>
+          label("ow_action", "", performLabel = false)
           transid.finished(
             this,
             start.copy(start = r.interval.start),
@@ -144,6 +149,7 @@ trait Container {
             endTime = r.interval.end,
             logLevel = InfoLevel)
         case Failure(t) =>
+          label("ow_action", "", performLabel = false)
           transid.failed(this, start, s"run failed with $t")
       }
       .map { result =>

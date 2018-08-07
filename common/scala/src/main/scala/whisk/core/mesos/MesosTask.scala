@@ -146,6 +146,8 @@ class MesosTask(override protected val id: ContainerId,
     Future.successful(Unit)
   }
 
+  def label(key: String, value: String, performLabel: Boolean = true)(implicit transid: TransactionId): Future[Unit] = Future.successful({})
+
   /** Dual of halt. */
   override def resume()(implicit transid: TransactionId): Future[Unit] = {
     // resume not supported
