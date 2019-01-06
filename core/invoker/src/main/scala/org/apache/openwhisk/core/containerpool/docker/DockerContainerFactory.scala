@@ -60,7 +60,7 @@ class DockerContainerFactory(instance: InvokerInstanceId,
                                actionImage: ExecManifest.ImageName,
                                userProvidedImage: Boolean,
                                memory: ByteSize,
-                               cpuShares: Int)(implicit config: WhiskConfig, logging: Logging): Future[Container] = {
+                               cpuShares: Int, nodeSelector: String)(implicit config: WhiskConfig, logging: Logging): Future[Container] = {
     DockerContainer.create(
       tid,
       image = if (userProvidedImage) Left(actionImage) else Right(actionImage.localImageName(config.runtimesRegistry)),

@@ -63,7 +63,8 @@ case class MemoryData(override val memoryLimit: ByteSize) extends ContainerData(
 case class PreWarmedData(container: Container,
                          kind: String,
                          override val memoryLimit: ByteSize,
-                         override val activeActivationCount: Int = 0)
+                         override val activeActivationCount: Int = 0,
+                         nodeSelector: String)
     extends ContainerData(Instant.EPOCH, memoryLimit, activeActivationCount)
 case class WarmedData(container: Container,
                       invocationNamespace: EntityName,
@@ -78,7 +79,7 @@ case class WarmedData(container: Container,
 }
 
 // Events received by the actor
-case class Start(exec: CodeExec[_], memoryLimit: ByteSize)
+case class Start(exec: CodeExec[_], memoryLimit: ByteSize, nodeSelector: String)
 case class Run(action: ExecutableWhiskAction, msg: ActivationMessage, retryLogDeadline: Option[Deadline] = None)
 case object Remove
 
@@ -128,7 +129,7 @@ case object RunCompleted
  * @param pauseGrace time to wait for new work before pausing the container
  */
 class ContainerProxy(
-  factory: (TransactionId, String, ImageName, Boolean, ByteSize, Int) => Future[Container],
+  factory: (TransactionId, String, ImageName, Boolean, ByteSize, Int, String) => Future[Container],
   sendActiveAck: ActiveAck,
   storeActivation: (TransactionId, WhiskActivation, UserContext) => Future[Any],
   collectLogs: (TransactionId, Identity, WhiskActivation, Container, ExecutableWhiskAction) => Future[ActivationLogs],
@@ -147,14 +148,16 @@ class ContainerProxy(
   when(Uninitialized) {
     // pre warm a container (creates a stem cell container)
     case Event(job: Start, _) =>
+      logging.info(this, s"Event Start: nodeSelector ${job.nodeSelector}")
       factory(
         TransactionId.invokerWarmup,
         ContainerProxy.containerName(instance, "prewarm", job.exec.kind),
         job.exec.image,
         job.exec.pull,
         job.memoryLimit,
-        poolConfig.cpuShare(job.memoryLimit))
-        .map(container => PreWarmCompleted(PreWarmedData(container, job.exec.kind, job.memoryLimit)))
+        poolConfig.cpuShare(job.memoryLimit),
+        job.nodeSelector)
+        .map(container => PreWarmCompleted(PreWarmedData(container, job.exec.kind, job.memoryLimit, 0, job.nodeSelector)))
         .pipeTo(self)
 
       goto(Starting)
@@ -164,13 +167,15 @@ class ContainerProxy(
       implicit val transid = job.msg.transid
 
       // create a new container
+      val nodeSelector = job.action.annotations.get("nodeSelector").toString()
+      logging.info(this, s"Event Run: nodeSelector $nodeSelector")
       val container = factory(
         job.msg.transid,
         ContainerProxy.containerName(instance, job.msg.user.namespace.name.asString, job.action.name.asString),
         job.action.exec.image,
         job.action.exec.pull,
         job.action.limits.memory.megabytes.MB,
-        poolConfig.cpuShare(job.action.limits.memory.megabytes.MB))
+        poolConfig.cpuShare(job.action.limits.memory.megabytes.MB), nodeSelector)
 
       // container factory will either yield a new container ready to execute the action, or
       // starting up the container failed; for the latter, it's either an internal error starting
@@ -181,7 +186,7 @@ class ContainerProxy(
             // the container is ready to accept an activation; register it as PreWarmed; this
             // normalizes the life cycle for containers and their cleanup when activations fail
             self ! PreWarmCompleted(
-              PreWarmedData(container, job.action.exec.kind, job.action.limits.memory.megabytes.MB, 1))
+              PreWarmedData(container, job.action.exec.kind, job.action.limits.memory.megabytes.MB, 1, nodeSelector))
 
           case Failure(t) =>
             // the container did not come up cleanly, so disambiguate the failure mode and then cleanup
@@ -236,7 +241,7 @@ class ContainerProxy(
       initializeAndRun(data.container, job)
         .map(_ => RunCompleted)
         .pipeTo(self)
-      goto(Running) using PreWarmedData(data.container, data.kind, data.memoryLimit, 1)
+      goto(Running) using PreWarmedData(data.container, data.kind, data.memoryLimit, 1, data.nodeSelector)
 
     case Event(Remove, data: PreWarmedData) => destroyContainer(data.container)
   }
@@ -567,7 +572,7 @@ final case class ContainerProxyTimeoutConfig(idleContainer: FiniteDuration, paus
 
 object ContainerProxy {
   def props(
-    factory: (TransactionId, String, ImageName, Boolean, ByteSize, Int) => Future[Container],
+    factory: (TransactionId, String, ImageName, Boolean, ByteSize, Int, String) => Future[Container],
     ack: (TransactionId, WhiskActivation, Boolean, ControllerInstanceId, UUID, Boolean) => Future[Any],
     store: (TransactionId, WhiskActivation, UserContext) => Future[Any],
     collectLogs: (TransactionId, Identity, WhiskActivation, Container, ExecutableWhiskAction) => Future[ActivationLogs],

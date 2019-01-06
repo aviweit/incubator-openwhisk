@@ -111,7 +111,7 @@ class KubernetesClient(
           image: String,
           memory: ByteSize = 256.MB,
           environment: Map[String, String] = Map.empty,
-          labels: Map[String, String] = Map.empty)(implicit transid: TransactionId): Future[KubernetesContainer] = {
+          labels: Map[String, String] = Map.empty, nodeSelector: String)(implicit transid: TransactionId): Future[KubernetesContainer] = {
 
     val envVars = environment.map {
       case (key, value) => new EnvVarBuilder().withName(key).withValue(value).build()
@@ -125,15 +125,16 @@ class KubernetesClient(
       .endMetadata()
       .withNewSpec()
       .withRestartPolicy("Always")
-    if (config.userPodNodeAffinity.enabled) {
+//TODO: return back userPodNodeAffinity and have nodeSelector to be optional
+    if (!nodeSelector.isEmpty){
       val invokerNodeAffinity = new AffinityBuilder()
         .withNewNodeAffinity()
         .withNewRequiredDuringSchedulingIgnoredDuringExecution()
         .addNewNodeSelectorTerm()
         .addNewMatchExpression()
-        .withKey(config.userPodNodeAffinity.key)
+        .withKey(nodeSelector)
         .withOperator("In")
-        .withValues(config.userPodNodeAffinity.value)
+        .withValues("true")
         .endMatchExpression()
         .endNodeSelectorTerm()
         .endRequiredDuringSchedulingIgnoredDuringExecution()
@@ -141,6 +142,7 @@ class KubernetesClient(
         .build()
       podBuilder.withAffinity(invokerNodeAffinity)
     }
+
     val pod = podBuilder
       .addNewContainer()
       .withNewResources()
@@ -253,7 +255,7 @@ trait KubernetesApi {
           image: String,
           memory: ByteSize,
           environment: Map[String, String] = Map.empty,
-          labels: Map[String, String] = Map.empty)(implicit transid: TransactionId): Future[KubernetesContainer]
+          labels: Map[String, String] = Map.empty, nodeSelector: String)(implicit transid: TransactionId): Future[KubernetesContainer]
 
   def rm(container: KubernetesContainer)(implicit transid: TransactionId): Future[Unit]
 

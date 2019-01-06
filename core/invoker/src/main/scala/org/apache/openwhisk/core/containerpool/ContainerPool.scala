@@ -72,10 +72,10 @@ class ContainerPool(childFactory: ActorRefFactory => ActorRef,
   val logMessageInterval = 10.seconds
 
   prewarmConfig.foreach { config =>
-    logging.info(this, s"pre-warming ${config.count} ${config.exec.kind} ${config.memoryLimit.toString}")(
+    logging.info(this, s"pre-warming ${config.count} ${config.exec.kind} ${config.memoryLimit.toString} ${config.nodeSelector}")(
       TransactionId.invokerWarmup)
     (1 to config.count).foreach { _ =>
-      prewarmContainer(config.exec, config.memoryLimit)
+      prewarmContainer(config.exec, config.memoryLimit, config.nodeSelector)
     }
   }
 
@@ -262,8 +262,8 @@ class ContainerPool(childFactory: ActorRefFactory => ActorRef,
   }
 
   /** Creates a new prewarmed container */
-  def prewarmContainer(exec: CodeExec[_], memoryLimit: ByteSize): Unit =
-    childFactory(context) ! Start(exec, memoryLimit)
+  def prewarmContainer(exec: CodeExec[_], memoryLimit: ByteSize, nodeSelector: String): Unit =
+    childFactory(context) ! Start(exec, memoryLimit, nodeSelector)
 
   /**
    * Takes a prewarm container out of the prewarmed pool
@@ -275,9 +275,11 @@ class ContainerPool(childFactory: ActorRefFactory => ActorRef,
   def takePrewarmContainer(action: ExecutableWhiskAction): Option[(ActorRef, ContainerData)] = {
     val kind = action.exec.kind
     val memory = action.limits.memory.megabytes.MB
+    // from type spray.json.JsValue
+    val nodeSelector = action.annotations.get("nodeSelector").toString()
     prewarmedPool
       .find {
-        case (_, PreWarmedData(_, `kind`, `memory`, _)) => true
+        case (_, PreWarmedData(_, `kind`, `memory`, _, `nodeSelector`)) => true
         case _                                          => false
       }
       .map {
@@ -288,7 +290,7 @@ class ContainerPool(childFactory: ActorRefFactory => ActorRef,
           // Create a new prewarm container
           // NOTE: prewarming ignores the action code in exec, but this is dangerous as the field is accessible to the
           // factory
-          prewarmContainer(action.exec, memory)
+          prewarmContainer(action.exec, memory, nodeSelector)
           (ref, data)
       }
   }
@@ -395,4 +397,4 @@ object ContainerPool {
 }
 
 /** Contains settings needed to perform container prewarming. */
-case class PrewarmingConfig(count: Int, exec: CodeExec[_], memoryLimit: ByteSize)
+case class PrewarmingConfig(count: Int, exec: CodeExec[_], memoryLimit: ByteSize, nodeSelector: String)

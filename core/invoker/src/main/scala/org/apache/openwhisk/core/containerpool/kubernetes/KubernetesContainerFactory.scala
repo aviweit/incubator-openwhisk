@@ -65,7 +65,7 @@ class KubernetesContainerFactory(label: String, config: WhiskConfig)(implicit ac
                                actionImage: ImageName,
                                userProvidedImage: Boolean,
                                memory: ByteSize,
-                               cpuShares: Int)(implicit config: WhiskConfig, logging: Logging): Future[Container] = {
+                               cpuShares: Int, nodeSelector: String)(implicit config: WhiskConfig, logging: Logging): Future[Container] = {
     val image = if (userProvidedImage) {
       actionImage.publicImageName
     } else {
@@ -79,7 +79,7 @@ class KubernetesContainerFactory(label: String, config: WhiskConfig)(implicit ac
       userProvidedImage,
       memory,
       environment = Map("__OW_API_HOST" -> config.wskApiHost),
-      labels = Map("invoker" -> label))
+      labels = Map("invoker" -> label), nodeSelector)
   }
 }
 

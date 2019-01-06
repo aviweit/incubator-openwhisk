@@ -56,7 +56,7 @@ object KubernetesContainer {
              userProvidedImage: Boolean = false,
              memory: ByteSize = 256.MB,
              environment: Map[String, String] = Map.empty,
-             labels: Map[String, String] = Map.empty)(implicit kubernetes: KubernetesApi,
+             labels: Map[String, String] = Map.empty, nodeSelector: String)(implicit kubernetes: KubernetesApi,
                                                       ec: ExecutionContext,
                                                       log: Logging): Future[KubernetesContainer] = {
     implicit val tid = transid
@@ -66,7 +66,7 @@ object KubernetesContainer {
     val podName = if (origName.endsWith("-")) origName.reverse.dropWhile(_ == '-').reverse else origName
 
     for {
-      container <- kubernetes.run(podName, image, memory, environment, labels).recoverWith {
+      container <- kubernetes.run(podName, image, memory, environment, labels, nodeSelector).recoverWith {
         case _ => Future.failed(WhiskContainerStartupError(s"Failed to run container with image '${image}'."))
       }
     } yield container
