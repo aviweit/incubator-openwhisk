@@ -109,6 +109,7 @@ class KubernetesClient(
 
   def run(name: String,
           image: String,
+          kind: String,
           memory: ByteSize = 256.MB,
           environment: Map[String, String] = Map.empty,
           labels: Map[String, String] = Map.empty)(implicit transid: TransactionId): Future[KubernetesContainer] = {
@@ -125,22 +126,28 @@ class KubernetesClient(
       .endMetadata()
       .withNewSpec()
       .withRestartPolicy("Always")
-    if (config.userPodNodeAffinity.enabled) {
-      val invokerNodeAffinity = new AffinityBuilder()
+
+    // TODO: re-add config.userPodNodeAffinity.enabled
+    if (kind.contains("@selector")){
+      def isAllowed(c: Char): Boolean = c.isLetterOrDigit || c == '@'
+      val sanitizeSlelector = kind.filter(isAllowed).split('@')(0)
+      log.info(this, s"Action node affinity: '$sanitizeSlelector'")
+      val affinity = new AffinityBuilder()
         .withNewNodeAffinity()
         .withNewRequiredDuringSchedulingIgnoredDuringExecution()
         .addNewNodeSelectorTerm()
         .addNewMatchExpression()
-        .withKey(config.userPodNodeAffinity.key)
+        .withKey(sanitizeSlelector)
         .withOperator("In")
-        .withValues(config.userPodNodeAffinity.value)
+        .withValues("true")
         .endMatchExpression()
         .endNodeSelectorTerm()
         .endRequiredDuringSchedulingIgnoredDuringExecution()
         .endNodeAffinity()
         .build()
-      podBuilder.withAffinity(invokerNodeAffinity)
+      podBuilder.withAffinity(affinity)
     }
+
     val pod = podBuilder
       .addNewContainer()
       .withNewResources()
@@ -208,7 +215,7 @@ class KubernetesClient(
   def logs(container: KubernetesContainer, sinceTime: Option[Instant], waitForSentinel: Boolean = false)(
     implicit transid: TransactionId): Source[TypedLogLine, Any] = {
 
-    log.debug(this, "Parsing logs from Kubernetes Graph Stage…")
+    log.debug(this, "Parsing logs from Kubernetes Graph Stageâ")
 
     Source
       .fromGraph(new KubernetesRestLogSourceStage(container.id, sinceTime, waitForSentinel))
@@ -251,6 +258,7 @@ object KubernetesClient {
 trait KubernetesApi {
   def run(name: String,
           image: String,
+          kind: String,
           memory: ByteSize,
           environment: Map[String, String] = Map.empty,
           labels: Map[String, String] = Map.empty)(implicit transid: TransactionId): Future[KubernetesContainer]
