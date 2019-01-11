@@ -127,28 +127,37 @@ class KubernetesClient(
       .withNewSpec()
       .withRestartPolicy("Always")
 
-    // TODO: re-add config.userPodNodeAffinity.enabled
-    if (kind.contains("@selector")){
-      def isAllowed(c: Char): Boolean = c.isLetterOrDigit || c == '@'
-      val sanitizeSlelector = kind.filter(isAllowed).split('@')(0)
-      log.info(this, s"Action node affinity: '$sanitizeSlelector'")
-      val affinity = new AffinityBuilder()
+    val intermediateBuilder = podBuilder
+    if (config.userPodNodeAffinity.enabled || kind.contains("@selector")){
+      val intermediateBuilder = podBuilder.withNewAffinity()
         .withNewNodeAffinity()
         .withNewRequiredDuringSchedulingIgnoredDuringExecution()
-        .addNewNodeSelectorTerm()
-        .addNewMatchExpression()
-        .withKey(sanitizeSlelector)
-        .withOperator("In")
-        .withValues("true")
-        .endMatchExpression()
-        .endNodeSelectorTerm()
-        .endRequiredDuringSchedulingIgnoredDuringExecution()
+      if (config.userPodNodeAffinity.enabled){
+        intermediateBuilder.addNewNodeSelectorTerm()
+          .addNewMatchExpression()
+          .withKey(config.userPodNodeAffinity.key)
+          .withOperator("In")
+          .withValues(config.userPodNodeAffinity.value)
+          .endMatchExpression()
+          .endNodeSelectorTerm()
+      }
+      if (kind.contains("@selector")){
+        def isAllowed(c: Char): Boolean = c.isLetterOrDigit || c == '@'
+        val sanitizeSlelector = kind.filter(isAllowed).split('@')(0)
+        log.info(this, s"Action node affinity: '$sanitizeSlelector'")
+        intermediateBuilder.addNewNodeSelectorTerm()
+          .addNewMatchExpression()
+          .withKey(sanitizeSlelector)
+          .withOperator("In")
+          .withValues("true")
+          .endMatchExpression()
+          .endNodeSelectorTerm()
+      }
+      intermediateBuilder.endRequiredDuringSchedulingIgnoredDuringExecution()
         .endNodeAffinity()
-        .build()
-      podBuilder.withAffinity(affinity)
+        .endAffinity()
     }
-
-    val pod = podBuilder
+    val pod = intermediateBuilder
       .addNewContainer()
       .withNewResources()
       .withLimits(Map("memory" -> new Quantity(memory.toMB + "Mi")).asJava)
@@ -215,7 +224,7 @@ class KubernetesClient(
   def logs(container: KubernetesContainer, sinceTime: Option[Instant], waitForSentinel: Boolean = false)(
     implicit transid: TransactionId): Source[TypedLogLine, Any] = {
 
-    log.debug(this, "Parsing logs from Kubernetes Graph Stageâ")
+    log.debug(this, "Parsing logs from Kubernetes Graph Stage.¢")
 
     Source
       .fromGraph(new KubernetesRestLogSourceStage(container.id, sinceTime, waitForSentinel))
